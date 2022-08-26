@@ -1,13 +1,17 @@
 <template>
-  <div id="app">
-    <div class="container">
+  <div id="app" class="container-lg">
+    <div>
       <header class="header">
-        <div class="title">
-          <h1>Decision game</h1>
-          <h2 v-if="progress">
+        <div class="title row row-cols-2">
+          <h1 class="col">Decision game</h1>
+          <h2 class="col" v-if="progress">
             Game {{ progress.number }}/{{ progress.count }}
           </h2>
         </div>
+        <aside class="game-room-picker" v-if="!me">
+          <o-input v-model="game_room"/>
+          <o-button @click="join_game" :disabled="!game_room">Join</o-button>
+        </aside>
         <aside class="scorecard">
           <header>
             <span class="name">Players</span>
@@ -100,6 +104,7 @@
 <script>
 import MoveButton from "@/components/MoveButton.vue";
 import WebCam from "@/components/WebCam.vue";
+
 export default {
   name: "App",
   components: {
@@ -114,17 +119,15 @@ export default {
       ready: false,
       info: [],
       connections: 0,
-
+      game_room: "Test game",
       game_state: {},
-
-      localStream: null,
-      remoteStream: null,
-      localPeerConnection: null,
-      remotePeerConnection: null,
     };
   },
 
   sockets: {
+    error: function (err) {
+      console.error(err);
+    },
     joined: function (data) {
       this.info.push({
         username: data,
@@ -162,6 +165,9 @@ export default {
     window.onbeforeunload = () => {
       this.$socket.emit("leave", this.username);
     };
+
+    // For dev purposes, attempt to join game immediately.
+    this.join_game();
   },
 
   watch: {
@@ -173,6 +179,13 @@ export default {
   },
 
   methods: {
+    join_game() {
+      console.debug("Initiate join game request");
+      this.$socket.emit("joinGame", {
+        game_room: this.game_room,
+        network_token: this.network_token,
+      });
+    },
     send() {
       this.messages.push({
         message: this.newMessage,
@@ -191,6 +204,21 @@ export default {
     },
   },
   computed: {
+    network_token() {
+      const key = "network-token";
+      const value = localStorage.getItem(key);
+      if (value) {
+        return value;
+      }
+      localStorage.setItem(
+        key,
+        `crosstalk_${(
+          Math.random() *
+          10 ** 16
+        ).toFixed()}.${new Date().getTime()}`
+      );
+      return localStorage.getItem(key);
+    },
     players() {
       try {
         return wrap(this.game_state.players, []);
@@ -307,46 +335,12 @@ function wrap(value, default_value = null) {
 </script>
 
 <style lang="scss">
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  padding: 3em 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-height: 100vh;
-  & > .container {
-    display: grid;
-    grid-template-rows: 20% 20% 60%;
-    grid-template-columns: 1fr;
-    flex-grow: 1;
-  }
-}
 .myself {
   font-weight: bold;
 }
-.flex {
-  display: flex;
-  justify-content: space-between;
-}
-.flex-col {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-.container {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 100%;
-}
 .header {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  .title {
+  .title h2 {
+    text-align: right;
   }
   .scorecard {
     display: flex;
@@ -381,7 +375,6 @@ function wrap(value, default_value = null) {
   height: 100%;
   margin: 1em auto;
   align-self: center;
-  max-width: 700px;
   justify-content: center;
 
   .description-wrapper {

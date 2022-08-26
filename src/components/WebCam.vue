@@ -6,62 +6,61 @@
 </template>
 
 <script>
-import {OpenVidu} from 'openvidu-browser'
+import { OpenVidu } from "openvidu-browser";
 export default {
   name: "WebCam",
   props: {
-    token: {type: String, required: false}
+    token: { type: String, required: false },
   },
-  data: function() {
+  data: function () {
     return {
       OV: new OpenVidu(),
-      session: null
-    }
+      session: null,
+    };
   },
   methods: {
     connect() {
-      const self = this
-      if(!this.token)
-        return
-      if(!this.session) {
-        this.session = this.OV.initSession()
-        this.session.on("streamCreated", event => {
-          self.session.subscribe(event.stream, self.$refs.subscriber)
-        })
+      if (!this.token) return;
+      if (!this.session) {
+        this.session = this.OV.initSession();
+        this.session.on("streamCreated", (event) => {
+          this.session.subscribe(event.stream, this.$refs.subscriber);
+        });
       }
-      this.session.connect(this.token)
-        .then(() => {
-          self.session.publish(
-              self.OV.initPublisher(self.$refs.publisher, {publishAudio: false})
-          )
-        })
+      this.session.connect(this.token).then(() => {
+        this.session.publish(
+          this.OV.initPublisher(this.$refs.publisher, { publishAudio: false })
+        );
+      });
     },
     leaveSession() {
-      if(!this.session) {
-        return
+      if (!this.session) {
+        return;
       }
       this.session.disconnect();
-    }
-  },
-  mounted: function() {
+    },
   },
   watch: {
-    token() { this.connect() }
+    token() {
+      this.connect();
+    },
   },
   created() {
     window.onbeforeunload = () => {
       if (this.session) this.session.disconnect();
-    }
-  }
-}
+    };
+  },
+};
 </script>
 
 <style scoped lang="scss">
 .webcam {
-  font-size: .5em;
+  font-size: 0.5em;
   z-index: 10;
 }
 </style>
 <style lang="scss">
-.webcam video { max-width: 100%; }
+.webcam video {
+  max-width: 100%;
+}
 </style>
