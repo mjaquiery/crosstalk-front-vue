@@ -1,35 +1,35 @@
 <template>
-  <div id="app" class="container-lg">
-    <div>
-      <header class="header">
-        <div class="title row row-cols-2">
-          <h1 class="col">Decision game</h1>
-          <h2 class="col" v-if="progress">
-            Game {{ progress.number }}/{{ progress.count }}
-          </h2>
-        </div>
-        <aside class="game-room-picker" v-if="!me">
-          <o-input v-model="game_room"/>
-          <o-button @click="join_game" :disabled="!game_room">Join</o-button>
-        </aside>
-        <aside class="scorecard">
-          <header>
-            <span class="name">Players</span>
-          </header>
-          <div
-            v-for="p in players"
-            :key="p.id"
-            :class="p === me ? 'myself player' : 'player'"
-          >
-            <span class="name">{{ p.name }}</span>
-            <span class="score">{{ p.score }}</span>
-          </div>
-        </aside>
-      </header>
-      <div class="camera flex">
-        <WebCam ref="camera-local" class="webcam" :token="ov_token" />
+  <div class="app">
+    <aside class="scorecard">
+      <div v-if="progress">
+        <p class="name">Game</p>
+        <p class="score">{{ progress.number }}/{{ progress.count }}</p>
       </div>
-      <div class="gameboard container">
+      <div
+        v-for="(p, i) in players"
+        :key="i"
+        :class="p === me ? 'myself' : ''"
+        class="player"
+      >
+        <p class="name">{{ p.name }}</p>
+        <p class="score">{{ p.score }}</p>
+      </div>
+    </aside>
+    <aside class="local-camera" ref="local_camera">
+      <div
+        v-if="$refs.webcam_manager && $refs.webcam_manager.session"
+        class="mask"
+      >
+        <p>View your video</p>
+      </div>
+    </aside>
+    <aside class="remote-camera" ref="remote_camera"></aside>
+    <aside class="game-room-picker" v-if="!me">
+      <o-input v-model="game_room" />
+      <o-button @click="join_game" :disabled="!game_room">Join</o-button>
+    </aside>
+    <div class="gameboard-wrapper">
+      <div class="gameboard">
         <div
           v-if="stage === 'Initial presentation'"
           class="description"
@@ -55,33 +55,30 @@
             @makeMove="makeMove"
           />
         </div>
-        <div v-if="stage === 'Reveal moves'" class="reveal reveal-moves flex">
+        <div v-if="stage === 'Reveal moves'" class="reveal reveal-moves">
           <div
             v-for="(m, i) in moves"
             :key="i"
             :class="
               m.player === me
-                ? 'myself player-move flex-col'
-                : 'player-move flex-col'
+                ? 'myself player-move'
+                : 'player-move'
             "
           >
             <span class="player-name">{{ m.player.name }}</span>
-            <span class="player-selected">selected</span>
+            <span class="player-selected">&nbsp;selected</span>
             <MoveButton :decision-label="m.label" disabled="disabled" />
           </div>
         </div>
         <div
           v-if="stage === 'Reveal payoff'"
-          class="reveal reveal-payoffs flex"
+          class="reveal reveal-payoffs"
         >
           <div
             v-for="(p, i) in payoffs"
             :key="i"
-            :class="
-              p.player === me
-                ? 'myself player-payoff flex-col'
-                : ' player-payoff flex-col'
-            "
+            class="player-payoff"
+            :class="p.player === me ? 'myself' : ''"
           >
             <span class="player-name">{{ p.player.name }}</span>
             <span class="payoff-name">{{ p.label }}</span>
@@ -95,21 +92,28 @@
         </div>
       </div>
     </div>
-    <footer>
-      <h3 v-if="stage">{{ stage }}</h3>
-    </footer>
   </div>
+  <footer>
+    <h3 v-if="stage">{{ stage }}</h3>
+  </footer>
+  <WebCamManager
+    class="webcam"
+    ref="webcam_manager"
+    :token="ov_token"
+    :publisher="$refs.local_camera"
+    :subscriber="$refs.remote_camera"
+  />
 </template>
 
 <script>
 import MoveButton from "@/components/MoveButton.vue";
-import WebCam from "@/components/WebCam.vue";
+import WebCamManager from "@/components/WebCamManager.vue";
 
 export default {
   name: "App",
   components: {
     MoveButton,
-    WebCam,
+    WebCamManager,
   },
   data: function () {
     return {
@@ -230,10 +234,20 @@ export default {
       try {
         return wrap(
           this.players.find((p) => p.you),
-          ""
+          null
         );
       } catch (e) {
-        return "";
+        return null;
+      }
+    },
+    them() {
+      try {
+        return wrap(
+          this.players.find((p) => !p.you),
+          null
+        );
+      } catch (e) {
+        return null;
       }
     },
     ov_token() {
@@ -335,92 +349,164 @@ function wrap(value, default_value = null) {
 </script>
 
 <style lang="scss">
+@import "bootstrap/scss/functions";
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/mixins";
+
+.app {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 10% 30% 60%;
+  grid-column-gap: 1rem;
+  grid-row-gap: 1%;
+  height: 100vh;
+  width: 100%;
+  max-width: breakpoint-max(md);
+
+  > .scorecard {
+    grid-row: 1;
+    grid-column: 1;
+    padding-left: 0.5em;
+    font-size: 0.8em;
+    > div {
+      display: flex;
+      justify-content: space-between;
+    }
+  }
+  > .local-camera {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  > .remote-camera {
+    grid-row: 2;
+    grid-column: 1 / 3;
+    display: flex;
+    justify-content: center;
+  }
+  > .gameboard-wrapper {
+    grid-row: 3;
+    grid-column: 1 / 3;
+  }
+}
+
+video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
 .myself {
   font-weight: bold;
 }
-.header {
-  .title h2 {
+
+.game-metadata {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+}
+.scorecard {
+  .header p {
+    font-weight: bold;
+    font-size: 1.25em;
+    background-color: rgba($secondary, 0.25);
+  }
+  p {
+    margin-bottom: 0.1em;
+  }
+  .score {
     text-align: right;
   }
-  .scorecard {
+}
+.local-camera {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+  .mask {
+    width: 100%;
+    height: 100%;
+    background-color: black;
+    position: absolute;
+    z-index: 1;
     display: flex;
-    flex-direction: column;
+    place-content: center;
     justify-content: center;
-    align-items: center;
-    padding: 1em;
-    background-color: gainsboro;
-    .player {
-      display: grid;
-      grid-template-columns: 4fr 1fr;
-      width: 100%;
-      .name {
-        text-align: left;
-        text-overflow: clip;
-        overflow: hidden;
-      }
-      .score {
-        text-align: right;
-      }
+    flex-direction: column;
+    transition: background-color 1s;
+    p {
+      color: white;
+      padding: 1em;
+      margin: 0;
+      text-align: center;
+      transition: opacity 1s;
+    }
+  }
+  .mask:hover,
+  .mask:focus {
+    background-color: transparent;
+    p {
+      opacity: 0;
     }
   }
 }
-.camera {
-  .webcam {
-    height: 150px;
-    width: 150px;
-  }
-}
-.gameboard {
-  background-color: aliceblue;
-  height: 100%;
-  margin: 1em auto;
-  align-self: center;
+.gameboard-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-
-  .description-wrapper {
-    text-align: left;
+  background-color: aliceblue;
+  .gameboard {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    justify-content: space-evenly;
+    align-items: center;
     .description {
-      p {
-        padding: 0.5em 1em;
-      }
+      padding: 0.5em 1em;
     }
     .description.prompt {
       text-align: center;
     }
-  }
-  .moves {
-    padding: 1em;
-    display: flex;
-    justify-content: space-between;
-  }
-  .reveal {
-    padding: 0 1em 1em 1em;
-  }
-  .reveal-moves {
-    .player-move {
-      .move {
-        background-color: inherit;
-        color: inherit;
-        border: none;
+    .moves {
+      padding: 1em;
+      display: flex;
+      justify-content: space-evenly;
+      width: 100%;
+    }
+    .reveal-moves {
+      display: flex;
+      width: 100%;
+      justify-content: space-evenly;
+      .player-move {
+        .move {
+          background-color: inherit;
+          color: inherit;
+          border: none;
+        }
+      }
+      .player-selected {
+        font-weight: normal;
       }
     }
-  }
-  .reveal-payoffs {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    .result-string {
-      grid-row: 1;
-      grid-column: 2;
-      align-self: center;
-    }
-    .player-payoff {
-      justify-content: space-between;
-      align-items: center;
-      span {
-        margin: 0.5em;
+    .reveal-payoffs {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      .result-string {
+        grid-row: 1;
+        grid-column: 2;
+        align-self: center;
       }
-    }
-    :not(.myself) {
+      .player-payoff {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: center;
+        span {
+          margin: 0.5em;
+        }
+      }
+      :not(.myself) {
+      }
     }
   }
 }

@@ -4,7 +4,6 @@ import VueSocketIO from "vue-socket.io";
 import { Button, Input } from '@oruga-ui/oruga-next'
 import App from "./App.vue";
 
-import "./assets/main.css";
 import "bootstrap/dist/css/bootstrap.css";
 import '@oruga-ui/oruga-next/dist/oruga.css'
 

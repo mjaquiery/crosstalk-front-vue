@@ -1,15 +1,15 @@
 <template>
   <div class="webcam">
-    <div class="publisher" ref="publisher"><h3>YOU</h3></div>
-    <div class="subscriber" ref="subscriber"><h3>OTHERS</h3></div>
   </div>
 </template>
 
 <script>
 import { OpenVidu } from "openvidu-browser";
 export default {
-  name: "WebCam",
+  name: "WebCamManager",
   props: {
+    publisher: { type: Object, required: false, default: null },
+    subscriber: { type: Object, required: false, default: null },
     token: { type: String, required: false },
   },
   data: function () {
@@ -21,15 +21,15 @@ export default {
   methods: {
     connect() {
       if (!this.token) return;
-      if (!this.session) {
-        this.session = this.OV.initSession();
-        this.session.on("streamCreated", (event) => {
-          this.session.subscribe(event.stream, this.$refs.subscriber);
-        });
-      }
+      this.session = this.OV.initSession();
+      this.session.on("streamCreated", (event) => {
+        console.log(`Showing subscribed stream`, event, this.subscriber);
+        this.session.subscribe(event.stream, this.subscriber);
+      });
       this.session.connect(this.token).then(() => {
+        console.info(`Publishing video to`, this.publisher);
         this.session.publish(
-          this.OV.initPublisher(this.$refs.publisher, { publishAudio: false })
+          this.OV.initPublisher(this.publisher, { publishAudio: false })
         );
       });
     },

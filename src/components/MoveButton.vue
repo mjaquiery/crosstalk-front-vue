@@ -22,7 +22,7 @@ export default {
   justify-content: center;
   align-items: center;
   .icon {
-    font-size: 6em;
+    font-size: 4em;
   }
 }
 </style>
