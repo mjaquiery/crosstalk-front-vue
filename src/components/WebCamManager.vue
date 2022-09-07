@@ -21,6 +21,13 @@ export default {
   methods: {
     connect() {
       if (!this.token) return;
+      if (this.session) {
+        this.session.disconnect().then(this.makeConnection);
+      } else {
+        this.makeConnection();
+      }
+    },
+    makeConnection() {
       this.session = this.OV.initSession();
       this.session.on("streamCreated", (event) => {
         console.log(`Showing subscribed stream`, event, this.subscriber);

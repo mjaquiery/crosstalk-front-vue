@@ -1,10 +1,13 @@
 <template>
-  <div class="app">
+
+  <div v-if="!game_over" class="app">
+
     <aside class="scorecard">
       <div v-if="progress">
-        <p class="name">Game</p>
+        <p class="name">Round</p>
         <p class="score">{{ progress.number }}/{{ progress.count }}</p>
       </div>
+
       <div
         v-for="(p, i) in players"
         :key="i"
@@ -15,6 +18,7 @@
         <p class="score">{{ p.score }}</p>
       </div>
     </aside>
+
     <aside class="local-camera" ref="local_camera">
       <div
         v-if="$refs.webcam_manager && $refs.webcam_manager.session"
@@ -23,11 +27,11 @@
         <p>View your video</p>
       </div>
     </aside>
+
+    <o-button @click="menu_open = !menu_open" class="menu">&#9776;</o-button>
+
     <aside class="remote-camera" ref="remote_camera"></aside>
-    <aside class="game-room-picker" v-if="!me">
-      <o-input v-model="game_room" />
-      <o-button @click="join_game" :disabled="!game_room">Join</o-button>
-    </aside>
+
     <div class="gameboard-wrapper">
       <div class="gameboard">
         <div
@@ -45,34 +49,33 @@
             decision_labels.length === 2 && stage === 'Player moves in progress'
           "
           class="moves"
+          :class="`moved-${(my_move !== null).toString()}`"
         >
           <MoveButton
             v-for="(d, i) in decision_labels"
             :key="i"
             :decision-label="d"
             :value="i"
-            :disabled="!allow_player_move"
+            :activated="my_move === i"
+            :disabled="!allow_player_move || my_move !== null"
             @makeMove="makeMove"
           />
         </div>
         <div v-if="stage === 'Reveal moves'" class="reveal reveal-moves">
-          <div
-            v-for="(m, i) in moves"
-            :key="i"
-            :class="
-              m.player === me
-                ? 'myself player-move'
-                : 'player-move'
-            "
-          >
-            <span class="player-name">{{ m.player.name }}</span>
+          <div class="player-move">
+            <span class="player-name">{{ moves.find(m => m.player !== me).player.name }}</span>
             <span class="player-selected">&nbsp;selected</span>
-            <MoveButton :decision-label="m.label" disabled="disabled" />
+            <MoveButton :decision-label="moves.find(m => m.player !== me).label" disabled="disabled" />
           </div>
         </div>
         <div
+          v-if="stage === 'Reveal payoff' && resultString"
+          class="reveal reveal-payoffs result-string"
+          v-html="resultString"
+        ></div>
+        <div
           v-if="stage === 'Reveal payoff'"
-          class="reveal reveal-payoffs"
+          class="reveal reveal-payoffs outcomes"
         >
           <div
             v-for="(p, i) in payoffs"
@@ -84,18 +87,30 @@
             <span class="payoff-name">{{ p.label }}</span>
             <span class="payoff-value">({{ p.value }})</span>
           </div>
-          <div
-            v-if="resultString"
-            v-html="resultString"
-            class="result-string"
-          ></div>
         </div>
       </div>
     </div>
   </div>
+  <div v-else class="app final-scores">
+    <h1>Final scores:</h1>
+    <div class="scores-wrapper">
+      <div
+        v-for="(p, i) in players"
+        :key="i"
+        :class="p === me ? 'myself' : ''"
+        class="player"
+      >
+        <p class="name">{{ p.name }}</p>
+        <p class="score">{{ p.score }}</p>
+      </div>
+    </div>
+    <o-button expanded @click="menu_open = !menu_open">Play again?</o-button>
+  </div>
+
   <footer>
     <h3 v-if="stage">{{ stage }}</h3>
   </footer>
+
   <WebCamManager
     class="webcam"
     ref="webcam_manager"
@@ -103,6 +118,37 @@
     :publisher="$refs.local_camera"
     :subscriber="$refs.remote_camera"
   />
+
+  <o-modal
+    :active="menu_open || !me"
+    class="menu modal container-md"
+    @close="menu_open = false"
+  >
+    <div class="menu-wrapper">
+      <h1>Connect to a Crosstalk Game</h1>
+      <div class="menu-inputs">
+        <div class="name-picker">
+          <o-input
+            v-model="player_name"
+            maxlength="24"
+            :has-counter="true"
+            placeholder="Player name"
+          />
+        </div>
+        <div class="game-room-picker">
+          <o-input
+            v-model="game_room"
+            @keydown="(e) => (e.key === 'Enter' ? join_game() : null)"
+            placeholder="Game room"
+          />
+          <o-button @click="join_game" :disabled="!game_room" expanded
+          >Join</o-button
+          >
+        </div>
+      </div>
+    </div>
+  </o-modal>
+
 </template>
 
 <script>
@@ -117,20 +163,21 @@ export default {
   },
   data: function () {
     return {
-      newMessage: null,
-      messages: [],
-      typing: false,
-      ready: false,
-      info: [],
-      connections: 0,
-      game_room: "Test game",
+      game_room: `Test${(10 + Math.random() * 90).toFixed(0)}`,
+      player_name: "",
       game_state: {},
+      game_over: false,
+      menu_open: false,
+      my_move: false,
     };
   },
 
   sockets: {
     error: function (err) {
       console.error(err);
+    },
+    warning: function (warn) {
+      console.warn(warn);
     },
     joined: function (data) {
       this.info.push({
@@ -152,17 +199,11 @@ export default {
       const gamestate = JSON.parse(data);
       console.log(gamestate);
       this.game_state = gamestate;
+      this.my_move = null;
     },
-    chatMessage: (data) => {
-      this.messages.push({
-        message: data.message,
-        type: 1,
-        user: data.user,
-      });
+    gameOver: function () {
+      this.game_over = true;
     },
-    typing: (data) => (this.typing = data),
-    stopTyping: () => (this.typing = false),
-    connections: (data) => (this.connections = data),
   },
 
   created() {
@@ -171,7 +212,7 @@ export default {
     };
 
     // For dev purposes, attempt to join game immediately.
-    this.join_game();
+    // this.join_game();
   },
 
   watch: {
@@ -185,8 +226,10 @@ export default {
   methods: {
     join_game() {
       console.debug("Initiate join game request");
+      this.menu_open = false;
       this.$socket.emit("joinGame", {
         game_room: this.game_room,
+        player_name: this.player_name,
         network_token: this.network_token,
       });
     },
@@ -205,6 +248,7 @@ export default {
     },
     makeMove(value) {
       this.$socket.emit("makeMove", value);
+      this.my_move = value;
     },
   },
   computed: {
@@ -356,7 +400,7 @@ function wrap(value, default_value = null) {
 .app {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 10% 30% 60%;
+  grid-template-rows: max(100px, 10%) 1fr 2fr;
   grid-column-gap: 1rem;
   grid-row-gap: 1%;
   height: 100vh;
@@ -366,8 +410,9 @@ function wrap(value, default_value = null) {
   > .scorecard {
     grid-row: 1;
     grid-column: 1;
+    align-self: center;
     padding-left: 0.5em;
-    font-size: 0.8em;
+    font-size: 1.2em;
     > div {
       display: flex;
       justify-content: space-between;
@@ -389,9 +434,59 @@ function wrap(value, default_value = null) {
   }
 }
 
+.app.final-scores {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  .scores-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 50%;
+    height: 50%;
+    justify-content: space-evenly;
+    align-items: center;
+    font-size: 2em;
+    .player {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+    }
+  }
+}
+
 video {
   max-width: 100%;
   max-height: 100%;
+}
+
+button.menu {
+  position: absolute;
+  top: 0;
+  --width: 2em;
+  left: calc(100% - var(--width));
+  width: var(--width);
+  height: var(--width);
+  z-index: 10;
+  border: 0;
+}
+
+.menu-wrapper {
+  width: min(400px, 75vw);
+  padding: 1em;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border-radius: 1em;
+  h1 {
+    font-size: 1.2em;
+    font-weight: bold;
+  }
+  .menu-inputs {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    height: 100%;
+  }
 }
 
 .myself {
@@ -453,7 +548,6 @@ video {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background-color: aliceblue;
   .gameboard {
     display: flex;
     flex-direction: column;
@@ -466,6 +560,7 @@ video {
     }
     .description.prompt {
       text-align: center;
+      font-size: 1.4em;
     }
     .moves {
       padding: 1em;
@@ -473,29 +568,40 @@ video {
       justify-content: space-evenly;
       width: 100%;
     }
+    .moves.moved-true {
+      color: lightgrey;
+    }
     .reveal-moves {
       display: flex;
       width: 100%;
       justify-content: space-evenly;
       .player-move {
+        text-align: center;
+        > span {
+          font-size: 1.4em;
+        }
         .move {
           background-color: inherit;
           color: inherit;
           border: none;
+          span.label {
+            font-weight: inherit;
+          }
         }
       }
-      .player-selected {
-        font-weight: normal;
-      }
     }
-    .reveal-payoffs {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      .result-string {
-        grid-row: 1;
-        grid-column: 2;
-        align-self: center;
-      }
+    .result-string {
+      grid-row: 1;
+      grid-column: 2;
+      align-self: center;
+      text-align: center;
+      font-size: 1.4em;
+      font-weight: bold;
+    }
+    .outcomes {
+      display: flex;
+      width: 100%;
+      justify-content: space-evenly;
       .player-payoff {
         display: flex;
         flex-direction: column;

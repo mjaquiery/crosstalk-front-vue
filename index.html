@@ -19,5 +19,13 @@
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
+    <script type="text/javascript">
+      function playVideo(delay=100) {
+        document.querySelectorAll('video').forEach(v => v.play())
+        setTimeout(() => playVideo(delay), delay)
+      }
+
+      playVideo()
+    </script>
   </body>
 </html>
